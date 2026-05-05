@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Tuzak Takip Grafiği</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #f4f1eb; --card: #fffef9; --border: #d6ceb8;
+      --text: #2a2318; --muted: #7a7060; --accent: #8a6e2f;
+      --ams: #1abc9c; --dmg: #c0392b; --eik: #27ae60; --sfg: #8e44ad; --zg: #2471a3; --zs: #d4891a;
+    }
+    body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 32px 20px 60px; }
+    .wrap { max-width: 900px; margin: 0 auto; }
+
+    header { text-align: center; margin-bottom: 30px; }
+    .eyebrow { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+    h1 { font-family: 'Playfair Display', serif; font-size: clamp(26px, 5vw, 42px); color: var(--text); }
+    .subtitle { margin-top: 8px; color: var(--muted); font-size: 13px; }
+    .divider { width: 60px; height: 2px; background: linear-gradient(90deg, var(--accent), transparent); margin: 14px auto 0; }
+
+    .status-bar { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 12px; color: var(--muted); margin-bottom: 20px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; flex-shrink: 0; }
+    .status-dot.live { background: #27ae60; animation: pulse 2s infinite; }
+    .status-dot.error { background: #c0392b; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    .refresh-btn { display: block; margin: 0 auto 22px; padding: 8px 20px; border-radius: 20px; border: 1.5px solid var(--border); background: var(--card); color: var(--muted); font-size: 12px; cursor: pointer; transition: all .2s; }
+    .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    .pills { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 22px; }
+    .pill { padding: 6px 16px; border-radius: 30px; border: 1.5px solid currentColor; font-size: 12px; font-weight: 500; cursor: pointer; transition: all .22s; background: transparent; }
+    .pill.active { color: #fff !important; }
+    .pill[data-key="ams"] { color: var(--ams); } .pill[data-key="ams"].active { background: var(--ams); border-color: var(--ams); }
+    .pill[data-key="dmg"] { color: var(--dmg); } .pill[data-key="dmg"].active { background: var(--dmg); border-color: var(--dmg); }
+    .pill[data-key="eik"] { color: var(--eik); } .pill[data-key="eik"].active { background: var(--eik); border-color: var(--eik); }
+    .pill[data-key="sfg"] { color: var(--sfg); } .pill[data-key="sfg"].active { background: var(--sfg); border-color: var(--sfg); }
+    .pill[data-key="zg"]  { color: var(--zg);  } .pill[data-key="zg"].active  { background: var(--zg);  border-color: var(--zg); }
+    .pill[data-key="zs"]  { color: var(--zs);  } .pill[data-key="zs"].active  { background: var(--zs);  border-color: var(--zs); }
+
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px 24px 18px; box-shadow: 0 4px 24px rgba(42,35,24,.07); margin-bottom: 20px; }
+    .chart-wrap { position: relative; height: 380px; }
+
+    .loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: var(--card); border-radius: 12px; z-index: 10; }
+    .spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading p { font-size: 13px; color: var(--muted); }
+
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .stat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; position: relative; overflow: hidden; }
+    .stat::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+    .stat[data-key="ams"]::before { background: var(--ams); }
+    .stat[data-key="dmg"]::before { background: var(--dmg); }
+    .stat[data-key="eik"]::before { background: var(--eik); }
+    .stat[data-key="sfg"]::before { background: var(--sfg); }
+    .stat[data-key="zg"]::before  { background: var(--zg);  }
+    .stat[data-key="zs"]::before  { background: var(--zs);  }
+    .stat-label { font-size: 10px; color: var(--muted); letter-spacing: .5px; margin-bottom: 4px; text-transform: uppercase; }
+    .stat-name  { font-size: 12px; font-weight: 500; margin-bottom: 6px; }
+    .stat-value { font-family: 'Playfair Display', serif; font-size: 26px; }
+    .stat[data-key="ams"] .stat-value { color: var(--ams); }
+    .stat[data-key="dmg"] .stat-value { color: var(--dmg); }
+    .stat[data-key="eik"] .stat-value { color: var(--eik); }
+    .stat[data-key="sfg"] .stat-value { color: var(--sfg); }
+    .stat[data-key="zg"]  .stat-value { color: var(--zg);  }
+    .stat[data-key="zs"]  .stat-value { color: var(--zs);  }
+    .stat-unit { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+    .tbl-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead tr { border-bottom: 2px solid var(--border); }
+    th { padding: 9px 12px; text-align: left; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+    td { padding: 9px 12px; border-bottom: 1px solid #ebe7dc; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: #f9f6f0; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+    .val-empty { color: #ccc; }
+    footer { text-align: center; color: var(--muted); font-size: 11px; margin-top: 36px; letter-spacing: .5px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Zararlı İzleme Sistemi</div>
+    <h1>Tuzak Takip Grafiği</h1>
+    <p class="subtitle">Google Sheets'ten canlı veri · Her 5 dakikada otomatik güncelleme</p>
+    <div class="divider"></div>
+  </header>
+
+  <div class="status-bar">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText">Veri yükleniyor...</span>
+  </div>
+
+  <button class="refresh-btn" onclick="loadData()">🔄 Yenile</button>
+
+  <div class="pills">
+    <button class="pill active" data-key="ams">AMS</button>
+    <button class="pill active" data-key="dmg">Doğu Meyve Güvesi</button>
+    <button class="pill active" data-key="eik">Elma İç Kurdu</button>
+    <button class="pill active" data-key="sfg">Şeftali Filiz Güvesi</button>
+    <button class="pill active" data-key="zg">Zeytin Güvesi</button>
+    <button class="pill active" data-key="zs">Zeytin Sineği</button>
+  </div>
+
+  <div class="card">
+    <div class="chart-wrap">
+      <div class="loading" id="loadingOverlay">
+        <div class="spinner"></div>
+        <p>Google Sheets'ten veri çekiliyor...</p>
+      </div>
+      <canvas id="chart"></canvas>
+    </div>
+  </div>
+
+  <div class="stats" id="statsContainer"></div>
+
+  <div class="card">
+    <div class="tbl-wrap">
+      <table>
+        <thead id="tableHead"></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer id="footerText">Bursa İl Tarım ve Orman Müdürlüğü · Zararlı İzleme Programı</footer>
+</div>
+
+<script>
+// Google Sheets ID ve gid — URL'den alındı
+const SHEET_ID = '19EV2RPSGqR7rS1L6bnp8hj9hznafE5RuT4F_extJUs4';
+const SHEET_GID = '85108475';
+// gviz/tq API: CORS sorunu yok, proxy gerekmez
+const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${SHEET_GID}`;
+
+// Spreadsheet sütun düzeni (0 bazlı):
+// A=0:Hafta, B=1:AMS, C=2:Hafta(DMG), D=3:DoğuMeyveG,
+// E=4:Hafta(EIK), F=5:ElmaİçK, G=6:Hafta(SFG), H=7:ŞeftaliFilizG,
+// I=8:Hafta(ZG), J=9:ZeytinG, K=10:Hafta(ZS), L=11:ZeytinSineği
+const PESTS = [
+  { key:'ams', label:'AMS',                  color:'#1abc9c', hC:0,  vC:1  },
+  { key:'dmg', label:'Doğu Meyve Güvesi',   color:'#c0392b', hC:2,  vC:3  },
+  { key:'eik', label:'Elma İç Kurdu',        color:'#27ae60', hC:4,  vC:5  },
+  { key:'sfg', label:'Şeftali Filiz Güvesi', color:'#8e44ad', hC:6,  vC:7  },
+  { key:'zg',  label:'Zeytin Güvesi',        color:'#2471a3', hC:8,  vC:9  },
+  { key:'zs',  label:'Zeytin Sineği',        color:'#d4891a', hC:10, vC:11 },
+];
+
+let chartInstance = null;
+
+function parseCSV(text) {
+  return text.trim().split('\n').map(row => {
+    const result = []; let cur = '', inQ = false;
+    for (let c of row) {
+      if (c === '"') inQ = !inQ;
+      else if (c === ',' && !inQ) { result.push(cur.trim()); cur = ''; }
+      else cur += c;
+    }
+    result.push(cur.trim());
+    return result;
+  });
+}
+
+function toNum(v) {
+  if (!v || v.trim() === '') return null;
+  return parseFloat(v.replace(',', '.'));
+}
+
+// JSONP: <script> etiketi ile veri çekme — CORS yok
+function fetchGvizJSONP() {
+  return new Promise((resolve, reject) => {
+    const cbName = 'gvizCb_' + Date.now();
+    const scriptId = 'gviz_script_' + cbName;
+    const timer = setTimeout(() => {
+      delete window[cbName];
+      const s = document.getElementById(scriptId);
+      if (s) s.remove();
+      reject(new Error('Zaman aşımı'));
+    }, 20000);
+
+    window[cbName] = (data) => {
+      clearTimeout(timer);
+      delete window[cbName];
+      const s = document.getElementById(scriptId);
+      if (s) s.remove();
+      if (data && data.table) resolve(data.table);
+      else reject(new Error('Geçersiz veri'));
+    };
+
+    const script = document.createElement('script');
+    script.id = scriptId;
+    script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:${cbName}&gid=${SHEET_GID}&t=${Date.now()}`;
+    script.onerror = () => {
+      clearTimeout(timer);
+      delete window[cbName];
+      reject(new Error('Script yüklenemedi'));
+    };
+    document.head.appendChild(script);
+  });
+}
+
+async function loadData() {
+  document.getElementById('loadingOverlay').style.display = 'flex';
+  document.getElementById('statusDot').className = 'status-dot';
+  document.getElementById('statusText').textContent = 'Veri yükleniyor...';
+  try {
+    // JSONP ile veri çek — hata olursa 3 kez dener
+    let table = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        table = await fetchGvizJSONP();
+        break;
+      } catch(e) {
+        if (attempt === 3) throw e;
+        document.getElementById('statusText').textContent = `Yeniden deneniyor (${attempt}/3)...`;
+        await new Promise(r => setTimeout(r, 2000 * attempt));
+      }
+    }
+    const dataRows = table.rows || [];
+
+    // Her zararlı için hafta→değer map
+    const pestMaps = PESTS.map(p => {
+      const map = {};
+      dataRows.forEach(row => {
+        const cells = row.c || [];
+        const hCell = cells[p.hC];
+        const vCell = cells[p.vC];
+        const h = hCell && hCell.v !== null ? parseFloat(hCell.v) : null;
+        const v = vCell && vCell.v !== null ? parseFloat(vCell.v) : null;
+        if (h !== null && v !== null && !isNaN(h) && !isNaN(v)) map[h] = v;
+      });
+      return map;
+    });
+
+    const weeks = [...new Set(pestMaps.flatMap(m => Object.keys(m).map(Number)))].sort((a,b)=>a-b);
+
+    renderChart(weeks, pestMaps);
+    renderStats(pestMaps);
+    renderTable(weeks, pestMaps);
+
+    const now = new Date().toLocaleTimeString('tr-TR');
+    document.getElementById('statusDot').className = 'status-dot live';
+    document.getElementById('statusText').textContent = 'Son güncelleme: ' + now;
+    document.getElementById('footerText').textContent = 'Bursa İl Tarım ve Orman Müdürlüğü · Zararlı İzleme Programı · ' + now;
+  } catch(e) {
+    document.getElementById('statusDot').className = 'status-dot error';
+    document.getElementById('statusText').textContent = 'Hata: ' + e.message;
+  } finally {
+    document.getElementById('loadingOverlay').style.display = 'none';
+  }
+}
+
+function renderChart(weeks, pestMaps) {
+  const datasets = PESTS.map((p, i) => ({
+    label: p.label,
+    data: weeks.map(w => pestMaps[i][w] ?? null),
+    borderColor: p.color, backgroundColor: p.color + '15',
+    pointBackgroundColor: p.color, pointBorderColor: '#fff', pointBorderWidth: 2,
+    pointRadius: 6, pointHoverRadius: 8, borderWidth: 2.5, tension: 0.3, fill: true, spanGaps: false,
+  }));
+
+  if (chartInstance) chartInstance.destroy();
+  chartInstance = new Chart(document.getElementById('chart'), {
+    type: 'line',
+    data: { labels: weeks.map(w => 'Hafta ' + w), datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#fffef9', titleColor: '#2a2318', bodyColor: '#7a7060',
+          borderColor: '#d6ceb8', borderWidth: 1, padding: 12,
+          callbacks: { label: ctx => ctx.parsed.y !== null ? `  ${ctx.dataset.label}: ${ctx.parsed.y} birey/tuzak` : null }
+        }
+      },
+      scales: {
+        x: { grid:{color:'#ebe7dc'}, ticks:{font:{family:'DM Sans',size:12},color:'#7a7060'} },
+        y: { grid:{color:'#ebe7dc'}, ticks:{font:{family:'DM Sans',size:12},color:'#7a7060'},
+             title:{display:true,text:'Birey / Tuzak',color:'#7a7060',font:{family:'DM Sans',size:12}} }
+      }
+    }
+  });
+
+  document.querySelectorAll('.pill').forEach(btn => {
+    btn.onclick = () => {
+      const idx = PESTS.findIndex(p => p.key === btn.dataset.key);
+      if (idx < 0) return;
+      const ds = chartInstance.data.datasets[idx];
+      ds.hidden = !ds.hidden;
+      btn.classList.toggle('active', !ds.hidden);
+      chartInstance.update();
+    };
+  });
+}
+
+function renderStats(pestMaps) {
+  const c = document.getElementById('statsContainer');
+  c.innerHTML = '';
+  PESTS.forEach((p, i) => {
+    const entries = Object.entries(pestMaps[i]);
+    if (!entries.length) return;
+    const [maxH, maxV] = entries.reduce((a,b) => +b[1]>+a[1] ? b : a);
+    const el = document.createElement('div');
+    el.className = 'stat'; el.dataset.key = p.key;
+    el.innerHTML = `<div class="stat-label">En Yüksek Değer</div>
+      <div class="stat-name">${p.label}</div>
+      <div class="stat-value">${maxV}</div>
+      <div class="stat-unit">birey/tuzak · Hafta ${maxH}</div>`;
+    c.appendChild(el);
+  });
+}
+
+function renderTable(weeks, pestMaps) {
+  document.getElementById('tableHead').innerHTML = '<tr><th>Hafta</th>' +
+    PESTS.map(p => `<th><span class="dot" style="background:${p.color}"></span>${p.label}</th>`).join('') + '</tr>';
+  document.getElementById('tableBody').innerHTML = weeks.map(w =>
+    `<tr><td><b>${w}</b></td>` +
+    pestMaps.map(m => m[w]!=null ? `<td>${m[w]}</td>` : `<td class="val-empty">—</td>`).join('') + '</tr>'
+  ).join('');
+}
+
+loadData();
+setInterval(loadData, 5 * 60 * 1000);
+</script>
+</body>
+</html>
