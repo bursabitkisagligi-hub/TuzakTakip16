@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta http-equiv="X-Frame-Options" content="ALLOWALL">
+  <meta http-equiv="Content-Security-Policy" content="frame-ancestors *;">
+  <title>Tuzak Takip Grafiği</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#f4f1eb;--card:#fffef9;--border:#d6ceb8;
+      --text:#2a2318;--muted:#7a7060;--accent:#8a6e2f;
+    }
+    body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:24px 16px 60px}
+    .wrap{max-width:980px;margin:0 auto}
+
+    header{text-align:center;margin-bottom:22px}
+    .eyebrow{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+    h1{font-family:'Playfair Display',serif;font-size:clamp(22px,5vw,38px);color:var(--text)}
+    .subtitle{margin-top:6px;color:var(--muted);font-size:13px}
+    .divider{width:60px;height:2px;background:linear-gradient(90deg,var(--accent),transparent);margin:12px auto 0}
+
+    .status-bar{display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:14px}
+    .sdot{width:8px;height:8px;border-radius:50%;background:#ccc;flex-shrink:0}
+    .sdot.live{background:#27ae60;animation:pulse 2s infinite}
+    .sdot.error{background:#c0392b}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+    .refresh-btn{display:block;margin:0 auto 18px;padding:7px 18px;border-radius:20px;border:1.5px solid var(--border);background:var(--card);color:var(--muted);font-size:12px;cursor:pointer;transition:all .2s}
+    .refresh-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+    /* Filtre paneli */
+    .filters{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 20px;margin-bottom:18px;box-shadow:0 2px 12px rgba(42,35,24,.05)}
+    .filter-row{margin-bottom:14px}
+    .filter-row:last-child{margin-bottom:0}
+    .filter-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+    .chip-group{display:flex;flex-wrap:wrap;gap:6px}
+
+    /* İlçe chip */
+    .ilce-chip{padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:500;cursor:pointer;transition:all .2s}
+    .ilce-chip:hover{border-color:var(--accent);color:var(--accent)}
+    .ilce-chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+
+    /* Zararlı chip — renk her biri için ayrı, JS ile set edilir */
+    .pest-chip{padding:6px 14px;border-radius:20px;border:1.5px solid currentColor;background:transparent;font-size:12px;font-weight:500;cursor:pointer;transition:all .2s;opacity:.55}
+    .pest-chip.active{opacity:1;color:#fff!important}
+
+    /* Grafik modu toggle */
+    .mode-toggle{display:flex;gap:6px;justify-content:flex-end;margin-bottom:12px}
+    .mode-btn{padding:5px 14px;border-radius:16px;border:1.5px solid var(--border);background:transparent;font-size:11px;color:var(--muted);cursor:pointer;transition:all .2s}
+    .mode-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px 22px 16px;box-shadow:0 4px 24px rgba(42,35,24,.07);margin-bottom:18px}
+    .chart-wrap{position:relative;height:380px}
+
+    .loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:var(--card);border-radius:12px;z-index:10}
+    .spinner{width:30px;height:30px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .loading p{font-size:13px;color:var(--muted)}
+
+    /* Özet kartlar */
+    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px}
+    .stat{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:13px 15px;position:relative;overflow:hidden}
+    .stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+    .stat-lbl{font-size:10px;color:var(--muted);letter-spacing:.5px;margin-bottom:3px;text-transform:uppercase}
+    .stat-name{font-size:11px;font-weight:500;margin-bottom:5px}
+    .stat-val{font-family:'Playfair Display',serif;font-size:26px}
+    .stat-unit{font-size:10px;color:var(--muted);margin-top:2px}
+
+    /* Tablo */
+    .tbl-wrap{overflow-x:auto}
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    thead tr{border-bottom:2px solid var(--border)}
+    th{padding:8px 10px;text-align:left;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-weight:500;white-space:nowrap}
+    td{padding:8px 10px;border-bottom:1px solid #ebe7dc;white-space:nowrap}
+    tbody tr:last-child td{border-bottom:none}
+    tbody tr:hover{background:#f9f6f0}
+    .tdot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px;vertical-align:middle}
+    .val-empty{color:#ccc}
+
+    .no-data{text-align:center;padding:50px;color:var(--muted);font-size:14px}
+    footer{text-align:center;color:var(--muted);font-size:11px;margin-top:32px;letter-spacing:.5px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Zararlı İzleme Sistemi</div>
+    <h1>Tuzak Takip Grafiği</h1>
+    <p class="subtitle">Bursa İli · İlçe ve zararlı bazlı karşılaştırmalı görünüm</p>
+    <div class="divider"></div>
+  </header>
+
+  <div class="status-bar">
+    <div class="sdot" id="statusDot"></div>
+    <span id="statusText">Veri yükleniyor...</span>
+  </div>
+  <button class="refresh-btn" onclick="loadData()">🔄 Yenile</button>
+
+  <!-- Filtre paneli -->
+  <div class="filters">
+    <div class="filter-row">
+      <div class="filter-label">İlçe</div>
+      <div class="chip-group" id="ilceChips"></div>
+    </div>
+    <div class="filter-row">
+      <div class="filter-label">Zararlı</div>
+      <div class="chip-group" id="pestChips"></div>
+    </div>
+  </div>
+
+  <!-- Grafik modu -->
+  <div class="mode-toggle">
+    <button class="mode-btn active" id="modeIlce" onclick="setMode('ilce')">İlçe karşılaştır</button>
+    <button class="mode-btn" id="modeZararli" onclick="setMode('zararli')">Zararlı karşılaştır</button>
+  </div>
+
+  <!-- Grafik -->
+  <div class="card">
+    <div class="chart-wrap">
+      <div class="loading" id="loadingOverlay">
+        <div class="spinner"></div>
+        <p>Google Sheets'ten veri çekiliyor...</p>
+      </div>
+      <canvas id="chart"></canvas>
+    </div>
+  </div>
+
+  <!-- Özet kartlar -->
+  <div class="stats" id="statsContainer"></div>
+
+  <!-- Tablo -->
+  <div class="card">
+    <div class="tbl-wrap">
+      <table>
+        <thead id="tableHead"></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer id="footerText">Bursa İl Tarım ve Orman Müdürlüğü · Zararlı İzleme Programı</footer>
+</div>
+
+<script>
+// ── Sabitler ──────────────────────────────────────────────────────────
+const CSV_URL  = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT6JUpmDgDl4vO_KIhOsRFc1F9-P5jKx2X3zjrkceNzY09rYdg6p8Mxh9KHmlbLNOQEPN2HJtayH4VA/pub?gid=953615882&single=true&output=csv';
+const SHEET_ID = '19EV2RPSGqR7rS1L6bnp8hj9hznafE5RuT4F_extJUs4';
+
+const ILCELER = ['Gemlik','İznik','İnegöl','Karacabey','Keles','Kestel',
+                 'Gürsu','Mudanya','Orhangazi','Osmangazi','Nilüfer',
+                 'Yıldırım','Mustafakemalpaşa'];
+
+const PALETTE = ['#c0392b','#2471a3','#27ae60','#8e44ad','#d4891a',
+                 '#1abc9c','#e67e22','#16a085','#8e44ad','#c0392b',
+                 '#f39c12','#2980b9','#7f8c8d','#e74c3c','#3498db'];
+
+// ── State ─────────────────────────────────────────────────────────────
+let allData      = [];   // işlenmiş kayıtlar
+let pestList     = [];   // benzersiz zararlılar
+let pestColorMap = {};   // zararlı → renk
+let selectedIlce = new Set(ILCELER); // başta hepsi seçili
+let selectedPest = null;             // tek zararlı (null = ilk)
+let chartMode    = 'ilce';           // 'ilce' | 'zararli'
+let chartInst    = null;
+
+// ── CSV yardımcıları ──────────────────────────────────────────────────
+function splitRow(row) {
+  const r=[]; let cur='', q=false;
+  for(const c of row){
+    if(c==='"') q=!q;
+    else if(c===','&&!q){r.push(cur);cur='';}
+    else cur+=c;
+  }
+  r.push(cur); return r;
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  const headers = splitRow(lines[0]).map(h=>h.trim());
+  return lines.slice(1).map(l=>{
+    const v=splitRow(l);
+    const o={};
+    headers.forEach((h,i)=>o[h]=(v[i]||'').trim());
+    return o;
+  }).filter(r=>Object.values(r).some(v=>v));
+}
+
+// "2: DMG: Çukurca: Osmangazi" → "Osmangazi"
+function extractIlce(tuzakAdi) {
+  const parts = tuzakAdi.split(':');
+  if(parts.length<2) return null;
+  const candidate = parts[parts.length-1].trim();
+  return ILCELER.find(i=>i.toLowerCase()===candidate.toLowerCase()) || candidate;
+}
+
+function processRows(rows) {
+  return rows.map(r=>{
+    const tuzakAdi = r['Tuzak Adı']||r['Tuzak Adi']||r['Tuzak adı']||r['tuzak_adi']||'';
+    const ilce = extractIlce(tuzakAdi);
+    const sayi = parseFloat((r['Sayı']||r['Sayi']||r['#']||r['Sayı ']||'0').toString().replace(',','.'));
+    const hafta = parseInt(r['WEEKNUM']||r['Weeknum']||r['weeknum']||r['Hafta']||'0');
+    const zararli = (r['Zararlı']||r['Zararli']||r['Tr']||r['Zararlı ']||'').trim();
+    return {tuzakAdi, ilce, sayi, hafta, zararli};
+  }).filter(r=>r.hafta>0 && r.zararli && r.ilce);
+}
+
+// (ilce, hafta, zararlı) → ortalama sayı / tuzak
+function buildAggMap(data) {
+  // agg[ilce][hafta][zararli] = {sum, tuzaklar}
+  const agg = {};
+  data.forEach(r=>{
+    if(!agg[r.ilce]) agg[r.ilce]={};
+    if(!agg[r.ilce][r.hafta]) agg[r.ilce][r.hafta]={};
+    if(!agg[r.ilce][r.hafta][r.zararli]) agg[r.ilce][r.hafta][r.zararli]={sum:0,tuzaklar:new Set()};
+    agg[r.ilce][r.hafta][r.zararli].sum += r.sayi;
+    agg[r.ilce][r.hafta][r.zararli].tuzaklar.add(r.tuzakAdi);
+  });
+  // avg hesapla
+  const result = {};
+  Object.entries(agg).forEach(([ilce,haftaObj])=>{
+    result[ilce]={};
+    Object.entries(haftaObj).forEach(([hafta,zObj])=>{
+      result[ilce][hafta]={};
+      Object.entries(zObj).forEach(([z,{sum,tuzaklar}])=>{
+        result[ilce][hafta][z] = Math.round(sum/tuzaklar.size);
+      });
+    });
+  });
+  return result;
+}
+
+// ── Veri çekme ────────────────────────────────────────────────────────
+async function fetchCSV() {
+  const res = await fetch(CSV_URL+'&nocache='+Date.now(),{cache:'no-store'});
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  return await res.text();
+}
+
+function fetchJSONP() {
+  return new Promise((resolve,reject)=>{
+    const cb='gviz_'+Date.now();
+    const sc=document.createElement('script');
+    const timer=setTimeout(()=>{sc.remove();delete window[cb];reject(new Error('Zaman aşımı'));},20000);
+    window[cb]=data=>{
+      clearTimeout(timer);sc.remove();delete window[cb];
+      if(!data||!data.table) return reject(new Error('Geçersiz veri'));
+      // gviz tablosunu CSV benzeri satırlara dönüştür
+      const cols=(data.table.cols||[]).map(c=>c.label||'');
+      const rows=(data.table.rows||[]).map(row=>{
+        const o={};
+        (row.c||[]).forEach((cell,i)=>{ o[cols[i]]= cell&&cell.v!=null ? String(cell.v) : ''; });
+        return o;
+      });
+      resolve(rows);
+    };
+    sc.onerror=()=>{clearTimeout(timer);sc.remove();delete window[cb];reject(new Error('Script hatası'));};
+    sc.src=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:${cb}&gid=953615882&t=${Date.now()}`;
+    document.head.appendChild(sc);
+  });
+}
+
+async function loadData() {
+  document.getElementById('loadingOverlay').style.display='flex';
+  document.getElementById('statusDot').className='sdot';
+  document.getElementById('statusText').textContent='Veri yükleniyor...';
+  try {
+    let rows;
+    try {
+      const text = await fetchCSV();
+      rows = parseCSV(text);
+    } catch(e) {
+      document.getElementById('statusText').textContent='Alternatif yöntem...';
+      rows = await fetchJSONP();
+    }
+
+    console.log('CSV sütunları:', rows.length>0 ? Object.keys(rows[0]) : 'boş');
+    console.log('İlk kayıt:', rows[0]);
+    allData = processRows(rows);
+    console.log('İşlenen kayıt sayısı:', allData.length);
+    if(!allData.length) throw new Error('Kayıt bulunamadı — Sheets paylaşım ayarını kontrol edin');
+
+    // Benzersiz zararlılar
+    pestList = [...new Set(allData.map(r=>r.zararli))].sort();
+    pestList.forEach((p,i)=>{ pestColorMap[p]=PALETTE[i%PALETTE.length]; });
+    if(!selectedPest || !pestList.includes(selectedPest)) selectedPest=pestList[0];
+
+    buildFilters();
+    renderAll();
+
+    const now=new Date().toLocaleTimeString('tr-TR');
+    document.getElementById('statusDot').className='sdot live';
+    document.getElementById('statusText').textContent='Son güncelleme: '+now;
+    document.getElementById('footerText').textContent='Bursa İl Tarım ve Orman Müdürlüğü · Zararlı İzleme Programı · '+now;
+  } catch(e) {
+    document.getElementById('statusDot').className='sdot error';
+    document.getElementById('statusText').textContent='Hata: '+e.message;
+  } finally {
+    document.getElementById('loadingOverlay').style.display='none';
+  }
+}
+
+// ── Filtre oluştur ────────────────────────────────────────────────────
+function buildFilters() {
+  // İlçe chipleri
+  const ic=document.getElementById('ilceChips');
+  ic.innerHTML='<button class="ilce-chip '+(selectedIlce.size===ILCELER.length?'active':'')+'" onclick="toggleAllIlce(this)">Tümü</button>';
+  ILCELER.forEach(ilce=>{
+    const active=selectedIlce.has(ilce)?'active':'';
+    ic.innerHTML+=`<button class="ilce-chip ${active}" onclick="toggleIlce('${ilce}',this)">${ilce}</button>`;
+  });
+
+  // Zararlı chipleri
+  const pc=document.getElementById('pestChips');
+  pc.innerHTML='';
+  pestList.forEach(p=>{
+    const col=pestColorMap[p];
+    const active=selectedPest===p;
+    pc.innerHTML+=`<button class="pest-chip ${active?'active':''}"
+      data-pest="${p}"
+      style="color:${col};${active?`background:${col};border-color:${col};`:`border-color:${col};`}"
+      onclick="selectPest('${p}',this)">${p}</button>`;
+  });
+}
+
+function toggleAllIlce(btn) {
+  const all=ILCELER.length;
+  if(selectedIlce.size===all){ selectedIlce=new Set(); }
+  else { selectedIlce=new Set(ILCELER); }
+  buildFilters(); renderAll();
+}
+
+function toggleIlce(ilce, btn) {
+  if(selectedIlce.has(ilce)) selectedIlce.delete(ilce);
+  else selectedIlce.add(ilce);
+  buildFilters(); renderAll();
+}
+
+function selectPest(pest, btn) {
+  selectedPest=pest;
+  buildFilters(); renderAll();
+}
+
+function setMode(mode) {
+  chartMode=mode;
+  document.getElementById('modeIlce').classList.toggle('active',mode==='ilce');
+  document.getElementById('modeZararli').classList.toggle('active',mode==='zararli');
+  renderAll();
+}
+
+// ── Render ────────────────────────────────────────────────────────────
+function renderAll() {
+  const aggMap = buildAggMap(allData);
+  const weeks = [...new Set(allData.map(r=>r.hafta))].sort((a,b)=>a-b);
+  const labels = weeks.map(w=>'Hafta '+w);
+
+  let datasets=[];
+
+  if(chartMode==='ilce') {
+    // Seçili zararlı için, her seçili ilçe ayrı çizgi
+    const activeIlce = ILCELER.filter(i=>selectedIlce.has(i));
+    const ilceColors = ['#c0392b','#2471a3','#27ae60','#8e44ad','#d4891a',
+                        '#1abc9c','#e67e22','#16a085','#f39c12','#2980b9',
+                        '#7f8c8d','#e74c3c','#3498db'];
+    datasets = activeIlce.map((ilce,idx)=>{
+      const col=ilceColors[idx%ilceColors.length];
+      return {
+        label:ilce,
+        data:weeks.map(w=>aggMap[ilce]&&aggMap[ilce][w]&&aggMap[ilce][w][selectedPest]!=null
+          ? aggMap[ilce][w][selectedPest] : null),
+        borderColor:col, backgroundColor:col+'18',
+        pointBackgroundColor:col, pointBorderColor:'#fff', pointBorderWidth:2,
+        pointRadius:5, pointHoverRadius:7, borderWidth:2.5, tension:0.3, fill:false, spanGaps:false,
+      };
+    });
+  } else {
+    // Seçili ilçeler için, her zararlı ayrı çizgi — ilçe ortalaması
+    datasets = pestList.map(pest=>{
+      const col=pestColorMap[pest];
+      const activeIlce=ILCELER.filter(i=>selectedIlce.has(i));
+      const data=weeks.map(w=>{
+        const vals=activeIlce.map(i=>aggMap[i]&&aggMap[i][w]&&aggMap[i][w][pest]!=null
+          ?aggMap[i][w][pest]:null).filter(v=>v!==null);
+        return vals.length>0 ? Math.round(vals.reduce((a,b)=>a+b,0)/vals.length) : null;
+      });
+      return {
+        label:pest, data,
+        borderColor:col, backgroundColor:col+'18',
+        pointBackgroundColor:col, pointBorderColor:'#fff', pointBorderWidth:2,
+        pointRadius:5, pointHoverRadius:7, borderWidth:2.5, tension:0.3, fill:false, spanGaps:false,
+      };
+    });
+  }
+
+  // Grafik
+  if(chartInst) chartInst.destroy();
+  chartInst=new Chart(document.getElementById('chart'),{
+    type:'line',
+    data:{labels, datasets},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{
+          display:true,
+          position:'bottom',
+          labels:{font:{family:'DM Sans',size:11},color:'#7a7060',boxWidth:12,padding:14}
+        },
+        tooltip:{
+          backgroundColor:'#fffef9',titleColor:'#2a2318',bodyColor:'#7a7060',
+          borderColor:'#d6ceb8',borderWidth:1,padding:12,
+          callbacks:{label:ctx=>ctx.parsed.y!==null?`  ${ctx.dataset.label}: ${ctx.parsed.y} birey/tuzak`:null}
+        }
+      },
+      scales:{
+        x:{grid:{color:'#ebe7dc'},ticks:{font:{family:'DM Sans',size:11},color:'#7a7060'}},
+        y:{grid:{color:'#ebe7dc'},ticks:{font:{family:'DM Sans',size:11},color:'#7a7060'},
+           title:{display:true,text:'Ort. Birey / Tuzak',color:'#7a7060',font:{family:'DM Sans',size:11}}}
+      }
+    }
+  });
+
+  // Özet kartlar
+  renderStats(aggMap, weeks);
+  renderTable(aggMap, weeks, labels);
+}
+
+function renderStats(aggMap, weeks) {
+  const c=document.getElementById('statsContainer');
+  c.innerHTML='';
+
+  if(chartMode==='ilce') {
+    // Seçili zararlı — her ilçenin en yüksek haftalık değeri
+    ILCELER.filter(i=>selectedIlce.has(i)).forEach((ilce,idx)=>{
+      const ilceColors=['#c0392b','#2471a3','#27ae60','#8e44ad','#d4891a',
+                        '#1abc9c','#e67e22','#16a085','#f39c12','#2980b9',
+                        '#7f8c8d','#e74c3c','#3498db'];
+      const col=ilceColors[idx%ilceColors.length];
+      let maxVal=null, maxH=null;
+      weeks.forEach(w=>{
+        const v=aggMap[ilce]&&aggMap[ilce][w]&&aggMap[ilce][w][selectedPest]!=null
+          ?aggMap[ilce][w][selectedPest]:null;
+        if(v!==null&&(maxVal===null||v>maxVal)){maxVal=v;maxH=w;}
+      });
+      if(maxVal===null) return;
+      const el=document.createElement('div');
+      el.className='stat';
+      el.style.setProperty('--pest-color',col);
+      el.innerHTML=`<div class="stat-lbl">En Yüksek</div>
+        <div class="stat-name">${ilce}</div>
+        <div class="stat-val" style="color:${col}">${maxVal}</div>
+        <div class="stat-unit">birey/tuzak · Hafta ${maxH}</div>`;
+      c.appendChild(el);
+    });
+  } else {
+    // Karşılaştırmalı — her zararlının seçili ilçeler ortalaması en yüksek haftası
+    pestList.forEach(pest=>{
+      const col=pestColorMap[pest];
+      const activeIlce=ILCELER.filter(i=>selectedIlce.has(i));
+      let maxVal=null, maxH=null;
+      weeks.forEach(w=>{
+        const vals=activeIlce.map(i=>aggMap[i]&&aggMap[i][w]&&aggMap[i][w][pest]!=null
+          ?aggMap[i][w][pest]:null).filter(v=>v!==null);
+        if(!vals.length) return;
+        const avg=Math.round(vals.reduce((a,b)=>a+b,0)/vals.length);
+        if(maxVal===null||avg>maxVal){maxVal=avg;maxH=w;}
+      });
+      if(maxVal===null) return;
+      const el=document.createElement('div');
+      el.className='stat';
+      el.innerHTML=`<div class="stat-lbl">En Yüksek Ort.</div>
+        <div class="stat-name">${pest}</div>
+        <div class="stat-val" style="color:${col}">${maxVal}</div>
+        <div class="stat-unit">birey/tuzak · Hafta ${maxH}</div>`;
+      c.appendChild(el);
+    });
+  }
+}
+
+function renderTable(aggMap, weeks, labels) {
+  const activeIlce=ILCELER.filter(i=>selectedIlce.has(i));
+  const ilceColors=['#c0392b','#2471a3','#27ae60','#8e44ad','#d4891a',
+                    '#1abc9c','#e67e22','#16a085','#f39c12','#2980b9',
+                    '#7f8c8d','#e74c3c','#3498db'];
+
+  if(chartMode==='ilce') {
+    // Satır: hafta | sütun: ilçe
+    document.getElementById('tableHead').innerHTML='<tr><th>Hafta</th>'+
+      activeIlce.map((il,i)=>`<th><span class="tdot" style="background:${ilceColors[i%ilceColors.length]}"></span>${il}</th>`).join('')+'</tr>';
+    document.getElementById('tableBody').innerHTML=weeks.map(w=>
+      `<tr><td><b>${w}</b></td>`+
+      activeIlce.map(il=>{
+        const v=aggMap[il]&&aggMap[il][w]&&aggMap[il][w][selectedPest]!=null
+          ?aggMap[il][w][selectedPest]:null;
+        return v!==null?`<td>${v}</td>`:`<td class="val-empty">—</td>`;
+      }).join('')+'</tr>'
+    ).join('');
+  } else {
+    // Satır: hafta | sütun: zararlı (ortalama)
+    document.getElementById('tableHead').innerHTML='<tr><th>Hafta</th>'+
+      pestList.map(p=>`<th><span class="tdot" style="background:${pestColorMap[p]}"></span>${p}</th>`).join('')+'</tr>';
+    document.getElementById('tableBody').innerHTML=weeks.map(w=>
+      `<tr><td><b>${w}</b></td>`+
+      pestList.map(p=>{
+        const vals=activeIlce.map(i=>aggMap[i]&&aggMap[i][w]&&aggMap[i][w][p]!=null
+          ?aggMap[i][w][p]:null).filter(v=>v!==null);
+        if(!vals.length) return `<td class="val-empty">—</td>`;
+        return `<td>${Math.round(vals.reduce((a,b)=>a+b,0)/vals.length)}</td>`;
+      }).join('')+'</tr>'
+    ).join('');
+  }
+}
+
+// ── Başlat ────────────────────────────────────────────────────────────
+loadData();
+setInterval(loadData, 5*60*1000);
+</script>
+</body>
+</html>
